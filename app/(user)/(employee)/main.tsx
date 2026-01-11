@@ -5,82 +5,77 @@ import {
   ScrollView,
   TouchableOpacity,
   StyleSheet,
+  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import Feather from '@expo/vector-icons/Feather';
 import CheckCircle from '@/components/Icons/CheckCircle';
 import AlertCircle from '@/components/Icons/AlertCircle';
-// Иконки-заглушки
+import { useTasks, useEmployeeStats, useRefreshOnFocus } from '@/hooks';
+import { useAuth } from '@/contexts/AuthContext';
+import type { TaskPriority } from '@/lib/api/types';
 
+// Хелпер для форматирования дедлайна
+function formatDeadline(deadline: string | null): string {
+  if (!deadline) return 'Без срока';
+  
+  const date = new Date(deadline);
+  const now = new Date();
+  const diffMs = date.getTime() - now.getTime();
+  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+  const diffDays = Math.floor(diffHours / 24);
+
+  if (diffMs < 0) return 'Просрочено';
+  if (diffHours < 1) return 'Менее часа';
+  if (diffHours < 24) return `${diffHours} ч.`;
+  if (diffDays === 1) return '1 день';
+  return `${diffDays} дн.`;
+}
+
+// Иконка-заглушка для Clock
 const Clock = ({ size = 24, color = "#000" }) => (
   <View style={{ width: size, height: size, backgroundColor: color, borderRadius: 4 }} />
 );
 
-
 export default function EmployeeMainView() {
   const router = useRouter();
+  const { user } = useAuth();
+  const [refreshing, setRefreshing] = React.useState(false);
 
-  const todayTasks = [
-    {
-      id: '1',
-      title: 'Проверить уровень запасов',
-      type: 'Регулярная',
-      deadline: 'Ежедневный чек-лист',
-      completed: true,
-    },
-    {
-      id: '2',
-      title: 'Связаться с винным поставщиком',
-      type: 'Разовая',
-      deadline: '2 часа',
-      priority: 'high',
-      completed: false,
-    },
-    {
-      id: '3',
-      title: 'Убрать барную зону',
-      type: 'Регулярная',
-      deadline: 'Ежедневный чек-лист',
-      completed: true,
-    },
-    {
-      id: '4',
-      title: 'Обучить нового бармена',
-      type: 'Разовая',
-      deadline: 'Завтра',
-      priority: 'medium',
-      completed: false,
-    },
-  ];
+  // Загружаем данные с API
+  const { tasks, isLoading: tasksLoading, refetch: refetchTasks } = useTasks();
+  const { stats, isLoading: statsLoading, refetch: refetchStats } = useEmployeeStats();
 
-  const managerNotes = [
-    { message: 'Отличная работа с новым коктейльным меню!', time: 'Вчера' },
-    { message: 'Пожалуйста, уделите внимание обучению нового сотрудника на этой неделе', time: '2 дня назад' },
-  ];
+  // Обновляем при фокусе
+  useRefreshOnFocus(() => {
+    refetchTasks();
+    refetchStats();
+  });
 
-  const stats = {
-    completedToday: 3,
-    pendingToday: 2,
-    overdue: 1,
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await Promise.all([refetchTasks(), refetchStats()]);
+    setRefreshing(false);
   };
 
-  const getPriorityColor = (priority: 'low' | 'medium' | 'high') => {
+  const isLoading = tasksLoading || statsLoading;
+
+  const getPriorityColor = (priority: TaskPriority) => {
     switch (priority) {
-      case 'high':
+      case 'HIGH':
         return { bg: '#FEE2E2', text: '#DC2626', border: '#FECACA' };
-      case 'medium':
+      case 'MEDIUM':
         return { bg: '#FFEDD5', text: '#EA580C', border: '#FDBA74' };
-      case 'low':
+      case 'LOW':
         return { bg: '#DBEAFE', text: '#2563EB', border: '#93C5FD' };
     }
   };
 
-  const getPriorityText = (priority: string) => {
+  const getPriorityText = (priority: TaskPriority) => {
     switch (priority) {
-      case 'high': return 'Высокий';
-      case 'medium': return 'Средний';
-      case 'low': return 'Низкий';
-      default: return priority;
+      case 'HIGH': return 'Высокий';
+      case 'MEDIUM': return 'Средний';
+      case 'LOW': return 'Низкий';
     }
   };
 
@@ -99,119 +94,131 @@ export default function EmployeeMainView() {
   };
 
   const handleMarkAsDone = (taskId: string) => {
-    // Mark as done logic here
+    // TODO: Implement mark as done
     console.log('Mark task as done:', taskId);
   };
+
+  // Показываем загрузку
+  if (isLoading && tasks.length === 0) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#FF6600" />
+        <Text style={styles.loadingText}>Загрузка...</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Мои задачи</Text>
-        <Text style={styles.headerSubtitle}>С возвращением, Emma!</Text>
+        <Text style={styles.headerSubtitle}>
+          С возвращением, {user?.name?.split(' ')[0] || 'Сотрудник'}!
+        </Text>
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.content} 
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+        }
+      >
         <View style={styles.sections}>
           {/* Stats */}
           <View style={styles.card}>
             <View style={styles.statsGrid}>
               <View style={styles.statItem}>
                 <CheckCircle size={32} color="#10B981" />
-                <Text style={styles.statValue}>{stats.completedToday}</Text>
+                <Text style={styles.statValue}>{stats?.completedToday ?? 0}</Text>
                 <Text style={styles.statLabel}>Готово</Text>
               </View>
               <View style={styles.statItem}>
                 <Clock size={32} color="#1E40AF" />
-                <Text style={styles.statValue}>{stats.pendingToday}</Text>
+                <Text style={styles.statValue}>{stats?.pendingToday ?? 0}</Text>
                 <Text style={styles.statLabel}>В работе</Text>
               </View>
               <View style={styles.statItem}>
                 <AlertCircle size={32} color="#EF4444" />
-                <Text style={styles.statValue}>{stats.overdue}</Text>
+                <Text style={styles.statValue}>{stats?.overdue ?? 0}</Text>
                 <Text style={styles.statLabel}>Просрочено</Text>
               </View>
             </View>
           </View>
 
-          {/* Manager Notes */}
-          {managerNotes.length > 0 && (
-            <View style={[styles.card, styles.notesCard]}>
-              <Text style={styles.cardTitle}>Заметки менеджера</Text>
-              <View style={styles.notesList}>
-                {managerNotes.map((note, index) => (
-                  <View key={index} style={styles.noteItem}>
-                    <Text style={styles.noteMessage}>{note.message}</Text>
-                    <Text style={styles.noteTime}>{note.time}</Text>
-                  </View>
-                ))}
-              </View>
-            </View>
-          )}
-
           {/* Today's Tasks */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Задачи на сегодня</Text>
-            <View style={styles.tasksList}>
-              {todayTasks.map((task) => {
-                const priorityColors = task.priority ? getPriorityColor(task.priority) : null;
-                
-                return (
-                  <TouchableOpacity
-                    key={task.id}
-                    style={styles.taskCard}
-                    onPress={() => handleTaskPress(task.id)}
-                  >
-                    <View style={styles.taskHeader}>
-                      <Text style={[
-                        styles.taskTitle,
-                        task.completed && styles.taskCompleted
-                      ]}>
-                        {task.title}
-                      </Text>
-                      {!task.completed && task.priority && (
-                        <Badge 
-                          style={{
-                            backgroundColor: priorityColors!.bg,
-                            borderColor: priorityColors!.border,
-                          }}
-                          textStyle={{ color: priorityColors!.text }}
-                        >
-                          {getPriorityText(task.priority)}
-                        </Badge>
-                      )}
-                    </View>
-
-                    <View style={styles.taskMeta}>
-                      <View style={styles.taskTags}>
-                        <Badge 
-                          style={styles.typeBadge}
-                          textStyle={styles.typeBadgeText}
-                        >
-                          {task.type}
-                        </Badge>
-                        <View style={styles.deadline}>
-                          <Clock size={16} color="#6B7280" />
-                          <Text style={styles.deadlineText}>{task.deadline}</Text>
-                        </View>
+            {tasks.length === 0 ? (
+              <View style={styles.emptyCard}>
+                <Text style={styles.emptyText}>Нет задач на сегодня</Text>
+              </View>
+            ) : (
+              <View style={styles.tasksList}>
+                {tasks.map((task) => {
+                  const priorityColors = task.priority ? getPriorityColor(task.priority) : null;
+                  const isCompleted = task.status === 'DONE';
+                  
+                  return (
+                    <TouchableOpacity
+                      key={task.id}
+                      style={styles.taskCard}
+                      onPress={() => handleTaskPress(task.id)}
+                    >
+                      <View style={styles.taskHeader}>
+                        <Text style={[
+                          styles.taskTitle,
+                          isCompleted && styles.taskCompleted
+                        ]}>
+                          {task.title}
+                        </Text>
+                        {!isCompleted && priorityColors && (
+                          <Badge 
+                            style={{
+                              backgroundColor: priorityColors.bg,
+                              borderColor: priorityColors.border,
+                            }}
+                            textStyle={{ color: priorityColors.text }}
+                          >
+                            {getPriorityText(task.priority)}
+                          </Badge>
+                        )}
                       </View>
-                      {task.completed && (
-                        <CheckCircle size={20} color="#10B981" />
-                      )}
-                    </View>
 
-                    {!task.completed && (
-                      <TouchableOpacity
-                        style={styles.doneButton}
-                        onPress={() => handleMarkAsDone(task.id)}
-                      >
-                        <Text style={styles.doneButtonText}>Отметить как выполненную</Text>
-                      </TouchableOpacity>
-                    )}
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
+                      <View style={styles.taskMeta}>
+                        <View style={styles.taskTags}>
+                          <Badge 
+                            style={styles.typeBadge}
+                            textStyle={styles.typeBadgeText}
+                          >
+                            Разовая
+                          </Badge>
+                          <View style={styles.deadline}>
+                            <Clock size={16} color="#6B7280" />
+                            <Text style={styles.deadlineText}>
+                              {formatDeadline(task.deadline)}
+                            </Text>
+                          </View>
+                        </View>
+                        {isCompleted && (
+                          <CheckCircle size={20} color="#10B981" />
+                        )}
+                      </View>
+
+                      {!isCompleted && (
+                        <TouchableOpacity
+                          style={styles.doneButton}
+                          onPress={() => handleMarkAsDone(task.id)}
+                        >
+                          <Text style={styles.doneButtonText}>Отметить как выполненную</Text>
+                        </TouchableOpacity>
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            )}
           </View>
         </View>
       </ScrollView>
@@ -223,6 +230,17 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F9FAFB',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F9FAFB',
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: '#6B7280',
   },
   header: {
     backgroundColor: 'white',
@@ -260,10 +278,6 @@ const styles = StyleSheet.create({
     shadowRadius: 3,
     elevation: 2,
   },
-  notesCard: {
-    backgroundColor: '#FFFBEB',
-    borderColor: '#FED7AA',
-  },
   statsGrid: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -281,29 +295,6 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   statLabel: {
-    fontSize: 14,
-    color: '#6B7280',
-  },
-  cardTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#111827',
-    marginBottom: 16,
-  },
-  notesList: {
-    gap: 12,
-  },
-  noteItem: {
-    backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 16,
-  },
-  noteMessage: {
-    fontSize: 16,
-    color: '#111827',
-    marginBottom: 4,
-  },
-  noteTime: {
     fontSize: 14,
     color: '#6B7280',
   },
@@ -329,6 +320,18 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 3,
     elevation: 2,
+  },
+  emptyCard: {
+    backgroundColor: 'white',
+    borderRadius: 16,
+    padding: 32,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    alignItems: 'center',
+  },
+  emptyText: {
+    fontSize: 16,
+    color: '#9CA3AF',
   },
   taskHeader: {
     flexDirection: 'row',

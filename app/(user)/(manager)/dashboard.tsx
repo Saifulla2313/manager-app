@@ -5,6 +5,8 @@ import {
   ScrollView,
   TouchableOpacity,
   StyleSheet,
+  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import CheckCircle from '@/components/Icons/CheckCircle';
@@ -12,24 +14,40 @@ import AlertCircle from '@/components/Icons/AlertCircle';
 import Plus from '@/components/Icons/Plus';
 import ArrowRight from '@/components/Icons/ArrowRight';
 import Clock from '@/components/Icons/Clock';
+import { useDashboardStats, useRefreshOnFocus } from '@/hooks';
 
+// Хелпер для форматирования времени
+function formatTimeAgo(dateString: string): string {
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMins / 60);
+  const diffDays = Math.floor(diffHours / 24);
 
+  if (diffMins < 1) return 'только что';
+  if (diffMins < 60) return `${diffMins} мин. назад`;
+  if (diffHours < 24) return `${diffHours} ч. назад`;
+  if (diffDays === 1) return 'вчера';
+  return `${diffDays} дн. назад`;
+}
 
 export default function ManagerDashboard() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState('routine');
+  const [refreshing, setRefreshing] = useState(false);
+  
+  // Загружаем данные с API
+  const { stats, recentActivity, isLoading, error, refetch } = useDashboardStats();
 
-  const stats = {
-    completedToday: 24,
-    overdue: 3,
-    pending: 12,
+  // Обновляем данные при фокусе на экране
+  useRefreshOnFocus(refetch);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await refetch();
+    setRefreshing(false);
   };
-
-  const recentActivity = [
-    { employee: 'Sarah Johnson', action: 'завершил утренний чек-лист', time: '10 минут назад' },
-    { employee: 'Mike Chen', action: 'отметил задачу как выполненную', time: '25 минут назад' },
-    { employee: 'Emma Davis', action: 'добавила комментарий', time: '1 час назад' },
-  ];
 
   const handleNavigate = (screen: string) => {
     router.push(screen as any);
@@ -73,6 +91,30 @@ export default function ManagerDashboard() {
     return <View>{children}</View>;
   };
 
+  // Показываем загрузку
+  if (isLoading && !stats) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#6366F1" />
+        <Text style={styles.loadingText}>Загрузка...</Text>
+      </View>
+    );
+  }
+
+  // Показываем ошибку
+  if (error && !stats) {
+    return (
+      <View style={styles.errorContainer}>
+        <AlertCircle size={48} color="#EF4444" />
+        <Text style={styles.errorText}>Ошибка загрузки данных</Text>
+        <Text style={styles.errorSubtext}>{error}</Text>
+        <TouchableOpacity style={styles.retryButton} onPress={refetch}>
+          <Text style={styles.retryButtonText}>Повторить</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       {/* Header */}
@@ -81,7 +123,13 @@ export default function ManagerDashboard() {
         <Text style={styles.headerSubtitle}>Управление задачами команды</Text>
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.content} 
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+        }
+      >
         {/* Stats Cards */}
         <View style={styles.section}>
           <View style={styles.card}>
@@ -91,21 +139,21 @@ export default function ManagerDashboard() {
                 <View style={styles.statIcon}>
                   <CheckCircle size={32} color="#10B981" />
                 </View>
-                <Text style={styles.statValue}>{stats.completedToday}</Text>
+                <Text style={styles.statValue}>{stats?.completedToday ?? 0}</Text>
                 <Text style={styles.statLabel}>Выполнено</Text>
               </View>
               <View style={styles.statItem}>
                 <View style={styles.statIcon}>
                   <AlertCircle size={32} color="#EF4444" />
                 </View>
-                <Text style={styles.statValue}>{stats.overdue}</Text>
+                <Text style={styles.statValue}>{stats?.overdue ?? 0}</Text>
                 <Text style={styles.statLabel}>Просрочено</Text>
               </View>
               <View style={styles.statItem}>
                 <View style={styles.statIcon}>
                   <Clock size={32} color="#6366F1" />
                 </View>
-                <Text style={styles.statValue}>{stats.pending}</Text>
+                <Text style={styles.statValue}>{stats?.pending ?? 0}</Text>
                 <Text style={styles.statLabel}>В работе</Text>
               </View>
             </View>
@@ -163,7 +211,9 @@ export default function ManagerDashboard() {
                     <Text style={styles.linkText}>Все</Text>
                   </TouchableOpacity>
                 </View>
-                <Text style={styles.tabDescription}>3 сотрудника с активными чек-листами</Text>
+                <Text style={styles.tabDescription}>
+                  {stats?.routineTemplateCount ?? 0} активных чек-листов
+                </Text>
               </View>
             </TabsContent>
 
@@ -177,7 +227,9 @@ export default function ManagerDashboard() {
                     <Text style={styles.linkText}>Все</Text>
                   </TouchableOpacity>
                 </View>
-                <Text style={styles.tabDescription}>8 активных задач назначено</Text>
+                <Text style={styles.tabDescription}>
+                  {stats?.pending ?? 0} активных задач назначено
+                </Text>
               </View>
             </TabsContent>
 
@@ -191,7 +243,9 @@ export default function ManagerDashboard() {
                     <Text style={styles.linkText}>Все</Text>
                   </TouchableOpacity>
                 </View>
-                <Text style={styles.tabDescription}>5 сотрудников в смене сегодня</Text>
+                <Text style={styles.tabDescription}>
+                  {stats?.employeeCount ?? 0} сотрудников
+                </Text>
               </View>
             </TabsContent>
           </Tabs>
@@ -201,18 +255,24 @@ export default function ManagerDashboard() {
         <View style={styles.section}>
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Последняя активность</Text>
-            <View style={styles.activityList}>
-              {recentActivity.map((activity, index) => (
-                <View key={index} style={styles.activityItem}>
-                  <View style={styles.activityDot} />
-                  <View style={styles.activityContent}>
-                    <Text style={styles.activityEmployee}>{activity.employee}</Text>
-                    <Text style={styles.activityAction}>{activity.action}</Text>
-                    <Text style={styles.activityTime}>{activity.time}</Text>
+            {recentActivity.length > 0 ? (
+              <View style={styles.activityList}>
+                {recentActivity.map((activity, index) => (
+                  <View key={activity.id || index} style={styles.activityItem}>
+                    <View style={styles.activityDot} />
+                    <View style={styles.activityContent}>
+                      <Text style={styles.activityEmployee}>{activity.employee}</Text>
+                      <Text style={styles.activityAction}>{activity.action}</Text>
+                      <Text style={styles.activityTime}>
+                        {formatTimeAgo(activity.time)}
+                      </Text>
+                    </View>
                   </View>
-                </View>
-              ))}
-            </View>
+                ))}
+              </View>
+            ) : (
+              <Text style={styles.emptyText}>Нет недавней активности</Text>
+            )}
           </View>
         </View>
       </ScrollView>
@@ -224,6 +284,48 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F9FAFB',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F9FAFB',
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: '#6B7280',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F9FAFB',
+    padding: 24,
+  },
+  errorText: {
+    marginTop: 16,
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  errorSubtext: {
+    marginTop: 8,
+    fontSize: 14,
+    color: '#6B7280',
+    textAlign: 'center',
+  },
+  retryButton: {
+    marginTop: 24,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    backgroundColor: '#6366F1',
+    borderRadius: 12,
+  },
+  retryButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
   },
   header: {
     backgroundColor: 'white',
@@ -402,5 +504,11 @@ const styles = StyleSheet.create({
   activityTime: {
     fontSize: 12,
     color: '#9CA3AF',
+  },
+  emptyText: {
+    fontSize: 14,
+    color: '#9CA3AF',
+    textAlign: 'center',
+    paddingVertical: 16,
   },
 });

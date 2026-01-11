@@ -5,16 +5,17 @@ import {
   ScrollView,
   TouchableOpacity,
   StyleSheet,
+  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import Feather from '@expo/vector-icons/Feather';
 import CheckCircle from '@/components/Icons/CheckCircle';
 import AlertCircle from '@/components/Icons/AlertCircle';
-// Иконки-заглушки
-const Bell = ({ size = 24, color = "#000" }) => (
-  <View style={{ width: size, height: size, backgroundColor: color, borderRadius: 2 }} />
-);
+import Bell from '@/components/Icons/Bell';
+import { useNotifications, useMarkNotificationRead, useRefreshOnFocus } from '@/hooks';
+import type { NotificationType } from '@/lib/api/types';
 
+// Иконки-заглушки
 const Clock = ({ size = 24, color = "#000" }) => (
   <View style={{ width: size, height: size, backgroundColor: color, borderRadius: 4 }} />
 );
@@ -22,82 +23,65 @@ const MessageSquare = ({ size = 24, color = "#000" }) => (
   <View style={{ width: size, height: size, backgroundColor: color, borderRadius: 2 }} />
 );
 
+// Хелпер для форматирования времени
+function formatTimeAgo(dateString: string): string {
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMins / 60);
+  const diffDays = Math.floor(diffHours / 24);
+
+  if (diffMins < 1) return 'только что';
+  if (diffMins < 60) return `${diffMins} мин. назад`;
+  if (diffHours < 24) return `${diffHours} ч. назад`;
+  if (diffDays === 1) return 'вчера';
+  return `${diffDays} дн. назад`;
+}
+
+// Получить иконку и цвет по типу уведомления
+function getNotificationStyle(type: NotificationType) {
+  switch (type) {
+    case 'NEW_TASK':
+      return { Icon: Bell, color: '#FF6600' };
+    case 'DEADLINE':
+      return { Icon: Clock, color: '#F59E0B' };
+    case 'COMMENT':
+      return { Icon: MessageSquare, color: '#3B82F6' };
+    case 'COMPLETED':
+      return { Icon: CheckCircle, color: '#10B981' };
+    case 'OVERDUE':
+      return { Icon: AlertCircle, color: '#EF4444' };
+    default:
+      return { Icon: Bell, color: '#6B7280' };
+  }
+}
 
 export default function NotificationsScreen() {
   const router = useRouter();
+  const [refreshing, setRefreshing] = React.useState(false);
 
-  const notifications = [
-    {
-      id: '1',
-      type: 'new-task',
-      title: 'Назначена новая задача',
-      message: 'Связаться с винным поставщиком',
-      time: '5 минут назад',
-      read: false,
-      taskId: '2',
-      icon: Bell,
-      color: '#FF6600',
-    },
-    {
-      id: '2',
-      type: 'deadline',
-      title: 'Приближается срок выполнения',
-      message: 'Связаться с винным поставщиком - осталось 2 часа',
-      time: '30 минут назад',
-      read: false,
-      taskId: '2',
-      icon: Clock,
-      color: '#F59E0B',
-    },
-    {
-      id: '3',
-      type: 'comment',
-      title: 'Менеджер прокомментировал вашу задачу',
-      message: 'Пожалуйста, уделите приоритет этой задаче сегодня',
-      time: '2 часа назад',
-      read: true,
-      taskId: '2',
-      icon: MessageSquare,
-      color: '#3B82F6',
-    },
-    {
-      id: '4',
-      type: 'completed',
-      title: 'Задача выполнена',
-      message: 'Вы выполнили "Обновить меню-доску"',
-      time: '3 часа назад',
-      read: true,
-      taskId: '3',
-      icon: CheckCircle,
-      color: '#10B981',
-    },
-    {
-      id: '5',
-      type: 'overdue',
-      title: 'Задача просрочена',
-      message: 'Обучить нового бармена просрочена',
-      time: '4 часа назад',
-      read: true,
-      taskId: '4',
-      icon: AlertCircle,
-      color: '#EF4444',
-    },
-    {
-      id: '6',
-      type: 'new-task',
-      title: 'Назначена новая задача',
-      message: 'Инвентаризация',
-      time: 'Вчера',
-      read: true,
-      taskId: '5',
-      icon: Bell,
-      color: '#FF6600',
-    },
-  ];
+  // Загружаем данные с API
+  const { notifications, unreadCount, isLoading, error, refetch } = useNotifications();
+  const { mutate: markAsRead } = useMarkNotificationRead();
 
-  const unreadCount = notifications.filter(n => !n.read).length;
+  // Обновляем при фокусе
+  useRefreshOnFocus(refetch);
 
-  const handleNotificationPress = (notification: any) => {
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await refetch();
+    setRefreshing(false);
+  };
+
+  const handleNotificationPress = async (notification: any) => {
+    // Отмечаем как прочитанное
+    if (!notification.read) {
+      await markAsRead(notification.id);
+      refetch();
+    }
+
+    // Переходим к задаче если есть taskId
     if (notification.taskId) {
       router.push({
         pathname: '/(user)/(employee)/task-details',
@@ -112,6 +96,16 @@ export default function NotificationsScreen() {
       <Text style={[styles.badgeText, textStyle]}>{children}</Text>
     </View>
   );
+
+  // Показываем загрузку
+  if (isLoading && notifications.length === 0) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#FF6600" />
+        <Text style={styles.loadingText}>Загрузка...</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -132,44 +126,55 @@ export default function NotificationsScreen() {
       </View>
 
       {/* Notifications List */}
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.content} 
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+        }
+      >
         <View style={styles.notificationsList}>
-          {notifications.map((notification) => {
-            const Icon = notification.icon;
-            return (
-              <TouchableOpacity
-                key={notification.id}
-                style={[
-                  styles.notificationCard,
-                  !notification.read && styles.unreadNotification
-                ]}
-                onPress={() => handleNotificationPress(notification)}
-              >
-                <View style={styles.notificationContent}>
-                  <View style={[styles.iconContainer, { backgroundColor: '#F9FAFB' }]}>
-                    <Icon size={20} color={notification.color} />
-                  </View>
-
-                  <View style={styles.notificationText}>
-                    <View style={styles.notificationHeader}>
-                      <Text style={styles.notificationTitle}>{notification.title}</Text>
-                      {!notification.read && (
-                        <View style={styles.unreadDot} />
-                      )}
-                    </View>
-                    <Text style={styles.notificationMessage}>{notification.message}</Text>
-                    <Text style={styles.notificationTime}>{notification.time}</Text>
-                  </View>
-                </View>
-              </TouchableOpacity>
-            );
-          })}
-
-          {notifications.length === 0 && (
+          {notifications.length === 0 ? (
             <View style={styles.emptyState}>
               <Bell size={48} color="#D1D5DB" />
               <Text style={styles.emptyText}>Уведомлений пока нет</Text>
             </View>
+          ) : (
+            notifications.map((notification) => {
+              const { Icon, color } = getNotificationStyle(notification.type);
+              
+              return (
+                <TouchableOpacity
+                  key={notification.id}
+                  style={[
+                    styles.notificationCard,
+                    !notification.read && styles.unreadNotification
+                  ]}
+                  onPress={() => handleNotificationPress(notification)}
+                >
+                  <View style={styles.notificationContent}>
+                    <View style={[styles.iconContainer, { backgroundColor: '#F9FAFB' }]}>
+                      <Icon size={20} color={color} />
+                    </View>
+
+                    <View style={styles.notificationText}>
+                      <View style={styles.notificationHeader}>
+                        <Text style={styles.notificationTitle}>{notification.title}</Text>
+                        {!notification.read && (
+                          <View style={styles.unreadDot} />
+                        )}
+                      </View>
+                      <Text style={styles.notificationMessage} numberOfLines={2}>
+                        {notification.message}
+                      </Text>
+                      <Text style={styles.notificationTime}>
+                        {formatTimeAgo(notification.createdAt)}
+                      </Text>
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              );
+            })
           )}
         </View>
       </ScrollView>
@@ -181,6 +186,17 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F9FAFB',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F9FAFB',
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: '#6B7280',
   },
   header: {
     backgroundColor: 'white',
@@ -237,6 +253,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 3,
     elevation: 2,
+    marginBottom: 12,
   },
   unreadNotification: {
     backgroundColor: '#FFFBEB',

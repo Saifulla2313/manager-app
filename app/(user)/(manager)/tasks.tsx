@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -6,81 +6,104 @@ import {
   TouchableOpacity,
   TextInput,
   StyleSheet,
+  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import Plus from '@/components/Icons/Plus';
 import AlertCircle from '@/components/Icons/AlertCircle';
 import Clock from '@/components/Icons/Clock';
+import { useTasks, useEmployees, useRefreshOnFocus } from '@/hooks';
+import type { TaskPriority, TaskStatus } from '@/lib/api/types';
 
+// Хелпер для форматирования дедлайна
+function formatDeadline(deadline: string | null): string {
+  if (!deadline) return 'Без срока';
+  
+  const date = new Date(deadline);
+  const now = new Date();
+  const diffMs = date.getTime() - now.getTime();
+  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+  const diffDays = Math.floor(diffHours / 24);
 
+  if (diffMs < 0) return 'Просрочено';
+  if (diffHours < 1) return 'Менее часа';
+  if (diffHours < 24) return `${diffHours} ч.`;
+  if (diffDays === 1) return '1 день';
+  return `${diffDays} дн.`;
+}
 
 export default function TasksManager() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<'instant' | 'routine'>('instant');
   const [searchQuery, setSearchQuery] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
 
-  // Данные для разовых задач
-  const instantTasks = [
-    {
-      id: '1',
-      title: 'Починить сломанный льдогенератор',
-      priority: 'high' as const,
-      employee: 'Mike Chen',
-      deadline: '2 часа',
-      status: 'in-progress' as const,
-    },
-    {
-      id: '2',
-      title: 'Заказать винные бокалы на замену',
-      priority: 'medium' as const,
-      employee: 'Sarah Johnson',
-      deadline: '1 день',
-      status: 'in-progress' as const,
-    },
-    {
-      id: '3',
-      title: 'Обновить меню-доску',
-      priority: 'low' as const,
-      employee: 'Emma Davis',
-      deadline: '3 дня',
-      status: 'done' as const,
-    },
-  ];
+  // Загружаем данные с API
+  const { tasks, isLoading: tasksLoading, error: tasksError, refetch: refetchTasks } = useTasks();
+  const { employees, isLoading: employeesLoading, refetch: refetchEmployees } = useEmployees();
 
-  // Данные для регулярных задач
-  const routineEmployees = [
-    { id: '1', name: 'Sarah Johnson', position: 'Официант', completed: 4, total: 6, progress: 67 },
-    { id: '2', name: 'Mike Chen', position: 'Повар', completed: 6, total: 6, progress: 100 },
-    { id: '3', name: 'Emma Davis', position: 'Бармен', completed: 2, total: 5, progress: 40 },
-  ];
+  // Обновляем данные при фокусе
+  useRefreshOnFocus(() => {
+    refetchTasks();
+    refetchEmployees();
+  });
 
-  const getPriorityColor = (priority: 'low' | 'medium' | 'high') => {
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await Promise.all([refetchTasks(), refetchEmployees()]);
+    setRefreshing(false);
+  };
+
+  // Фильтрация задач по поиску
+  const filteredTasks = useMemo(() => {
+    if (!searchQuery.trim()) return tasks;
+    const query = searchQuery.toLowerCase();
+    return tasks.filter(
+      (task) =>
+        task.title.toLowerCase().includes(query) ||
+        task.assignee.name.toLowerCase().includes(query)
+    );
+  }, [tasks, searchQuery]);
+
+  // Фильтрация сотрудников по поиску
+  const filteredEmployees = useMemo(() => {
+    if (!searchQuery.trim()) return employees;
+    const query = searchQuery.toLowerCase();
+    return employees.filter(
+      (emp) =>
+        emp.name.toLowerCase().includes(query) ||
+        (emp.position?.toLowerCase().includes(query) ?? false)
+    );
+  }, [employees, searchQuery]);
+
+  const getPriorityColor = (priority: TaskPriority) => {
     switch (priority) {
-      case 'high':
+      case 'HIGH':
         return { bg: '#FEE2E2', text: '#DC2626', border: '#FECACA' };
-      case 'medium':
+      case 'MEDIUM':
         return { bg: '#FFEDD5', text: '#EA580C', border: '#FDBA74' };
-      case 'low':
+      case 'LOW':
         return { bg: '#DBEAFE', text: '#2563EB', border: '#93C5FD' };
     }
   };
 
-  const getStatusColor = (status: 'in-progress' | 'done') => {
-    return status === 'done'
+  const getStatusColor = (status: TaskStatus) => {
+    return status === 'DONE'
       ? { bg: '#D1FAE5', text: '#065F46', border: '#A7F3D0' }
       : { bg: '#F3F4F6', text: '#374151', border: '#D1D5DB' };
   };
 
-  const getPriorityText = (priority: 'low' | 'medium' | 'high') => {
+  const getPriorityText = (priority: TaskPriority) => {
     switch (priority) {
-      case 'high': return 'Высокий';
-      case 'medium': return 'Средний';
-      case 'low': return 'Низкий';
+      case 'HIGH': return 'Высокий';
+      case 'MEDIUM': return 'Средний';
+      case 'LOW': return 'Низкий';
     }
   };
 
-  const getStatusText = (status: 'in-progress' | 'done') => {
-    return status === 'in-progress' ? 'В работе' : 'Выполнено';
+  const getStatusText = (status: TaskStatus) => {
+    return status === 'IN_PROGRESS' ? 'В работе' : 'Выполнено';
   };
 
   const handleTaskPress = (taskId: string) => {
@@ -110,7 +133,7 @@ export default function TasksManager() {
       <View 
         style={[
           styles.progressFill,
-          { width: `${value}%` }
+          { width: `${Math.min(value, 100)}%` }
         ]} 
       />
     </View>
@@ -151,107 +174,164 @@ export default function TasksManager() {
   );
 
   // Компонент списка разовых задач
-  const InstantTasksList = () => (
-    <View style={styles.taskList}>
-      {instantTasks.map((task) => {
-        const priorityColors = getPriorityColor(task.priority);
-        const statusColors = getStatusColor(task.status);
-        const initials = task.employee.split(' ').map(n => n[0]).join('');
+  const InstantTasksList = () => {
+    if (tasksLoading && tasks.length === 0) {
+      return (
+        <View style={styles.centerContainer}>
+          <ActivityIndicator size="large" color="#6366F1" />
+        </View>
+      );
+    }
 
-        return (
-          <TouchableOpacity
-            key={task.id}
-            style={styles.taskCard}
-            onPress={() => handleTaskPress(task.id)}
-          >
-            <View style={styles.taskHeader}>
-              <Text style={styles.taskTitle} numberOfLines={2}>{task.title}</Text>
-              <Badge 
-                style={{
-                  backgroundColor: priorityColors.bg,
-                  borderColor: priorityColors.border,
-                }}
-                textStyle={{ color: priorityColors.text }}
-              >
-                {getPriorityText(task.priority)}
-              </Badge>
-            </View>
+    if (tasksError && tasks.length === 0) {
+      return (
+        <View style={styles.centerContainer}>
+          <AlertCircle size={32} color="#EF4444" />
+          <Text style={styles.errorText}>Ошибка загрузки</Text>
+        </View>
+      );
+    }
 
-            <View style={styles.taskDetails}>
-              <View style={styles.employeeInfo}>
-                <View style={styles.avatar}>
-                  <Text style={styles.avatarText}>{initials}</Text>
-                </View>
-                <Text style={styles.employeeName}>{task.employee}</Text>
-              </View>
+    if (filteredTasks.length === 0) {
+      return (
+        <View style={styles.centerContainer}>
+          <Text style={styles.emptyText}>
+            {searchQuery ? 'Задачи не найдены' : 'Нет задач'}
+          </Text>
+        </View>
+      );
+    }
 
-              <View style={styles.taskMeta}>
-                <View style={styles.deadline}>
-                  <Clock size={16} color="#6B7280" />
-                  <Text style={styles.deadlineText}>{task.deadline}</Text>
-                </View>
+    return (
+      <View style={styles.taskList}>
+        {filteredTasks.map((task) => {
+          const priorityColors = getPriorityColor(task.priority);
+          const statusColors = getStatusColor(task.status);
+          const initials = task.assignee.name.split(' ').map(n => n[0]).join('');
+
+          return (
+            <TouchableOpacity
+              key={task.id}
+              style={styles.taskCard}
+              onPress={() => handleTaskPress(task.id)}
+            >
+              <View style={styles.taskHeader}>
+                <Text style={styles.taskTitle} numberOfLines={2}>{task.title}</Text>
                 <Badge 
                   style={{
-                    backgroundColor: statusColors.bg,
-                    borderColor: statusColors.border,
+                    backgroundColor: priorityColors.bg,
+                    borderColor: priorityColors.border,
                   }}
-                  textStyle={{ color: statusColors.text }}
+                  textStyle={{ color: priorityColors.text }}
                 >
-                  {getStatusText(task.status)}
+                  {getPriorityText(task.priority)}
                 </Badge>
               </View>
-            </View>
 
-            {task.priority === 'high' && task.status !== 'done' && (
-              <View style={styles.priorityAlert}>
-                <AlertCircle size={16} color="#DC2626" />
-                <Text style={styles.priorityAlertText}>Высокий приоритет - требует внимания</Text>
+              <View style={styles.taskDetails}>
+                <View style={styles.employeeInfo}>
+                  <View style={styles.avatar}>
+                    <Text style={styles.avatarText}>{initials}</Text>
+                  </View>
+                  <Text style={styles.employeeName}>{task.assignee.name}</Text>
+                </View>
+
+                <View style={styles.taskMeta}>
+                  <View style={styles.deadline}>
+                    <Clock size={16} color="#6B7280" />
+                    <Text style={styles.deadlineText}>{formatDeadline(task.deadline)}</Text>
+                  </View>
+                  <Badge 
+                    style={{
+                      backgroundColor: statusColors.bg,
+                      borderColor: statusColors.border,
+                    }}
+                    textStyle={{ color: statusColors.text }}
+                  >
+                    {getStatusText(task.status)}
+                  </Badge>
+                </View>
               </View>
-            )}
-          </TouchableOpacity>
-        );
-      })}
-    </View>
-  );
 
-  // Компонент списка регулярных задач
-  const RoutineTasksList = () => (
-    <View style={styles.taskList}>
-      {routineEmployees.map((employee) => (
-        <TouchableOpacity
-          key={employee.id}
-          style={styles.employeeCard}
-          onPress={() => handleEmployeePress(employee.id)}
-        >
-          <View style={styles.employeeHeader}>
-            <View style={styles.employeeInfo}>
-              <Text style={styles.employeeName}>{employee.name}</Text>
-              <Text style={styles.employeePosition}>{employee.position}</Text>
-            </View>
-            <View style={styles.employeeStats}>
-              <Text style={styles.employeeCount}>{employee.completed}/{employee.total}</Text>
-              <Text style={styles.employeeLabel}>Задач</Text>
-            </View>
-          </View>
+              {task.priority === 'HIGH' && task.status !== 'DONE' && (
+                <View style={styles.priorityAlert}>
+                  <AlertCircle size={16} color="#DC2626" />
+                  <Text style={styles.priorityAlertText}>Высокий приоритет - требует внимания</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    );
+  };
 
-          <View style={styles.progressSection}>
-            <View style={styles.progressHeader}>
-              <Text style={styles.progressLabel}>Прогресс за сегодня</Text>
-              <Text style={styles.progressPercent}>{employee.progress}%</Text>
-            </View>
-            <Progress value={employee.progress} />
-          </View>
+  // Компонент списка регулярных задач (сотрудники с прогрессом)
+  const RoutineTasksList = () => {
+    if (employeesLoading && employees.length === 0) {
+      return (
+        <View style={styles.centerContainer}>
+          <ActivityIndicator size="large" color="#6366F1" />
+        </View>
+      );
+    }
 
-          <TouchableOpacity
-            style={styles.detailsButton}
-            onPress={() => handleEmployeePress(employee.id)}
-          >
-            <Text style={styles.detailsButtonText}>Подробнее</Text>
-          </TouchableOpacity>
-        </TouchableOpacity>
-      ))}
-    </View>
-  );
+    if (filteredEmployees.length === 0) {
+      return (
+        <View style={styles.centerContainer}>
+          <Text style={styles.emptyText}>
+            {searchQuery ? 'Сотрудники не найдены' : 'Нет сотрудников'}
+          </Text>
+        </View>
+      );
+    }
+
+    return (
+      <View style={styles.taskList}>
+        {filteredEmployees.map((employee) => {
+          const progress = employee.totalToday > 0 
+            ? Math.round((employee.completedToday / employee.totalToday) * 100) 
+            : 0;
+
+          return (
+            <TouchableOpacity
+              key={employee.id}
+              style={styles.employeeCard}
+              onPress={() => handleEmployeePress(employee.id)}
+            >
+              <View style={styles.employeeHeader}>
+                <View style={styles.employeeInfoBlock}>
+                  <Text style={styles.employeeNameLarge}>{employee.name}</Text>
+                  <Text style={styles.employeePosition}>{employee.position || 'Сотрудник'}</Text>
+                </View>
+                <View style={styles.employeeStats}>
+                  <Text style={styles.employeeCount}>
+                    {employee.completedToday}/{employee.totalToday}
+                  </Text>
+                  <Text style={styles.employeeLabel}>Задач</Text>
+                </View>
+              </View>
+
+              <View style={styles.progressSection}>
+                <View style={styles.progressHeader}>
+                  <Text style={styles.progressLabel}>Прогресс за сегодня</Text>
+                  <Text style={styles.progressPercent}>{progress}%</Text>
+                </View>
+                <Progress value={progress} />
+              </View>
+
+              <TouchableOpacity
+                style={styles.detailsButton}
+                onPress={() => handleEmployeePress(employee.id)}
+              >
+                <Text style={styles.detailsButtonText}>Подробнее</Text>
+              </TouchableOpacity>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -270,7 +350,13 @@ export default function TasksManager() {
       <Tabs />
 
       {/* Content */}
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.content} 
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+        }
+      >
         {activeTab === 'instant' ? <InstantTasksList /> : <RoutineTasksList />}
       </ScrollView>
 
@@ -294,6 +380,20 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F9FAFB',
   },
+  centerContainer: {
+    padding: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  errorText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: '#EF4444',
+  },
+  emptyText: {
+    fontSize: 16,
+    color: '#9CA3AF',
+  },
   searchContainer: {
     backgroundColor: 'white',
     paddingHorizontal: 16,
@@ -309,6 +409,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     fontSize: 16,
     backgroundColor: 'white',
+    color: '#111827',
   },
   tabsContainer: {
     flexDirection: 'row',
@@ -359,6 +460,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 3,
     elevation: 2,
+    marginBottom: 12,
   },
   taskHeader: {
     flexDirection: 'row',
@@ -447,6 +549,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 3,
     elevation: 2,
+    marginBottom: 12,
   },
   employeeHeader: {
     flexDirection: 'row',
@@ -454,10 +557,10 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     marginBottom: 16,
   },
-  employeeInfo: {
+  employeeInfoBlock: {
     flex: 1,
   },
-  employeeName: {
+  employeeNameLarge: {
     fontSize: 18,
     fontWeight: '600',
     color: '#111827',

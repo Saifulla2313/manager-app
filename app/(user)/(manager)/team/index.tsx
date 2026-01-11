@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -6,68 +6,40 @@ import {
   TouchableOpacity,
   TextInput,
   StyleSheet,
+  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import Search from '@/components/Icons/Search';
-
-
+import { useEmployees, useRefreshOnFocus } from '@/hooks';
 
 export default function EmployeesList() {
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
 
-  const employees = [
-    {
-      id: '1',
-      name: 'Sarah Johnson',
-      position: 'Официант',
-      avatar: 'SJ',
-      completedToday: 8,
-      totalToday: 10,
-      progress: 80,
-    },
-    {
-      id: '2',
-      name: 'Mike Chen',
-      position: 'Повар',
-      avatar: 'MC',
-      completedToday: 12,
-      totalToday: 12,
-      progress: 100,
-    },
-    {
-      id: '3',
-      name: 'Emma Davis',
-      position: 'Бармен',
-      avatar: 'ED',
-      completedToday: 5,
-      totalToday: 9,
-      progress: 56,
-    },
-    {
-      id: '4',
-      name: 'James Wilson',
-      position: 'Официант',
-      avatar: 'JW',
-      completedToday: 7,
-      totalToday: 10,
-      progress: 70,
-    },
-    {
-      id: '5',
-      name: 'Lisa Anderson',
-      position: 'Хостес',
-      avatar: 'LA',
-      completedToday: 6,
-      totalToday: 8,
-      progress: 75,
-    },
-  ];
+  // Загружаем данные с API
+  const { employees, isLoading, error, refetch } = useEmployees();
 
-  const filteredEmployees = employees.filter(emp =>
-    emp.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    emp.position.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // Обновляем при фокусе
+  useRefreshOnFocus(refetch);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await refetch();
+    setRefreshing(false);
+  };
+
+  // Фильтрация по поиску
+  const filteredEmployees = useMemo(() => {
+    if (!searchQuery.trim()) return employees;
+    const query = searchQuery.toLowerCase();
+    return employees.filter(
+      (emp) =>
+        emp.name.toLowerCase().includes(query) ||
+        (emp.position?.toLowerCase().includes(query) ?? false)
+    );
+  }, [employees, searchQuery]);
 
   // Компонент прогресс-бара
   const Progress = ({ value }: { value: number }) => (
@@ -75,11 +47,34 @@ export default function EmployeesList() {
       <View 
         style={[
           styles.progressFill,
-          { width: `${value}%` }
+          { width: `${Math.min(value, 100)}%` }
         ]} 
       />
     </View>
   );
+
+  // Показываем загрузку
+  if (isLoading && employees.length === 0) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#6366F1" />
+        <Text style={styles.loadingText}>Загрузка...</Text>
+      </View>
+    );
+  }
+
+  // Показываем ошибку
+  if (error && employees.length === 0) {
+    return (
+      <View style={styles.errorContainer}>
+        <Text style={styles.errorText}>Ошибка загрузки</Text>
+        <Text style={styles.errorSubtext}>{error}</Text>
+        <TouchableOpacity style={styles.retryButton} onPress={refetch}>
+          <Text style={styles.retryButtonText}>Повторить</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -99,48 +94,73 @@ export default function EmployeesList() {
       </View>
 
       {/* Employee List */}
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.content} 
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+        }
+      >
         <View style={styles.employeeList}>
-          {filteredEmployees.map((employee) => (
-            <View key={employee.id} style={styles.employeeCard}>
-              <View style={styles.employeeRow}>
-                <View style={styles.avatar}>
-                  <Text style={styles.avatarText}>{employee.avatar}</Text>
-                </View>
-
-                <View style={styles.employeeInfo}>
-                  <Text style={styles.employeeName}>{employee.name}</Text>
-                  <Text style={styles.employeePosition}>{employee.position}</Text>
-
-                  <View style={styles.progressSection}>
-                    <View style={styles.progressHeader}>
-                      <Text style={styles.progressLabel}>Прогресс за сегодня</Text>
-                      <Text style={styles.progressCount}>
-                        {employee.completedToday}/{employee.totalToday} задач
-                      </Text>
-                    </View>
-                    <Progress value={employee.progress} />
-                    <Text style={styles.progressPercent}>{employee.progress}% выполнено</Text>
-                  </View>
-
-                  <TouchableOpacity
-                    style={styles.profileButton}
-                    onPress={() => router.push({
-                      pathname: '/(user)/(manager)/team/employee-profile',
-                      params: { employeeId: employee.id }
-                    })}
-                  >
-                    <Text style={styles.profileButtonText}>Открыть профиль</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </View>
-          ))}
-
-          {filteredEmployees.length === 0 && (
+          {filteredEmployees.length === 0 ? (
             <View style={styles.emptyState}>
-              <Text style={styles.emptyText}>Сотрудники не найдены</Text>
+              <Text style={styles.emptyText}>
+                {searchQuery ? 'Сотрудники не найдены' : 'Нет сотрудников'}
+              </Text>
             </View>
+          ) : (
+            filteredEmployees.map((employee) => {
+              const progress = employee.totalToday > 0 
+                ? Math.round((employee.completedToday / employee.totalToday) * 100)
+                : 0;
+              const initials = employee.name.split(' ').map(n => n[0]).join('');
+
+              return (
+                <View key={employee.id} style={styles.employeeCard}>
+                  <View style={styles.employeeRow}>
+                    <View style={styles.avatar}>
+                      <Text style={styles.avatarText}>{initials}</Text>
+                    </View>
+
+                    <View style={styles.employeeInfo}>
+                      <Text style={styles.employeeName}>{employee.name}</Text>
+                      <Text style={styles.employeePosition}>
+                        {employee.position || 'Сотрудник'}
+                      </Text>
+
+                      <View style={styles.progressSection}>
+                        <View style={styles.progressHeader}>
+                          <Text style={styles.progressLabel}>Прогресс за сегодня</Text>
+                          <Text style={styles.progressCount}>
+                            {employee.completedToday}/{employee.totalToday} задач
+                          </Text>
+                        </View>
+                        <Progress value={progress} />
+                        <Text style={styles.progressPercent}>{progress}% выполнено</Text>
+                      </View>
+
+                      {employee.overdue > 0 && (
+                        <View style={styles.overdueContainer}>
+                          <Text style={styles.overdueText}>
+                            ⚠️ {employee.overdue} просроченных задач
+                          </Text>
+                        </View>
+                      )}
+
+                      <TouchableOpacity
+                        style={styles.profileButton}
+                        onPress={() => router.push({
+                          pathname: '/(user)/(manager)/team/employee-profile',
+                          params: { employeeId: employee.id }
+                        })}
+                      >
+                        <Text style={styles.profileButtonText}>Открыть профиль</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </View>
+              );
+            })
           )}
         </View>
       </ScrollView>
@@ -153,26 +173,52 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F9FAFB',
   },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F9FAFB',
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: '#6B7280',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F9FAFB',
+    padding: 24,
+  },
+  errorText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  errorSubtext: {
+    marginTop: 8,
+    fontSize: 14,
+    color: '#6B7280',
+  },
+  retryButton: {
+    marginTop: 24,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    backgroundColor: '#6366F1',
+    borderRadius: 12,
+  },
+  retryButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
+  },
   header: {
     backgroundColor: 'white',
     paddingHorizontal: 24,
     paddingVertical: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
-  },
-  headerTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginBottom: 16,
-  },
-  backButton: {
-    padding: 4,
-  },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#111827',
   },
   searchContainer: {
     flexDirection: 'row',
@@ -210,6 +256,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 3,
     elevation: 2,
+    marginBottom: 12,
   },
   employeeRow: {
     flexDirection: 'row',
@@ -278,6 +325,17 @@ const styles = StyleSheet.create({
   progressPercent: {
     fontSize: 12,
     color: '#6B7280',
+  },
+  overdueContainer: {
+    backgroundColor: '#FEF2F2',
+    padding: 8,
+    borderRadius: 8,
+    marginBottom: 16,
+  },
+  overdueText: {
+    fontSize: 12,
+    color: '#DC2626',
+    fontWeight: '500',
   },
   profileButton: {
     paddingVertical: 12,

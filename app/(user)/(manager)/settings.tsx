@@ -22,7 +22,7 @@ import User from '@/components/Icons/User';
 
 export default function SettingsScreen() {
   const router = useRouter();
-  const { userRole, logout } = useAuth();
+  const { user, userRole, logout } = useAuth();
 
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [soundEnabled, setSoundEnabled] = useState(true);
@@ -30,11 +30,12 @@ export default function SettingsScreen() {
   const [language, setLanguage] = useState('ru');
   const [showLanguageModal, setShowLanguageModal] = useState(false);
 
+  // Используем реальные данные из API
   const profile = {
-    name: userRole === 'manager' ? 'Sarah Johnson' : 'Emma Davis',
-    role: userRole === 'manager' ? 'Менеджер' : 'Бармен',
-    phone: '+7 (999) 123-4567',
-    email: userRole === 'manager' ? 'sarah@restaurant.com' : 'emma@restaurant.com',
+    name: user?.name || 'Пользователь',
+    role: user?.position || (userRole === 'MANAGER' ? 'Менеджер' : 'Сотрудник'),
+    phone: '+7 (999) 123-4567', // TODO: добавить телефон в API
+    email: user?.email || '',
   };
 
   const languages = [
