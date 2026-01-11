@@ -11,6 +11,9 @@ export { useEmployees, useEmployee } from './useEmployees';
 export { useDashboardStats, useEmployeeStats } from './useStats';
 export { useNotifications, useMarkNotificationRead, useMarkAllNotificationsRead } from './useNotifications';
 
+// Push notifications
+export { usePushNotifications } from './usePushNotifications';
+
 // Existing hooks
 export { useColorScheme } from './use-color-scheme';
 export { useThemeColor } from './use-theme-color';

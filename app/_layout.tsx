@@ -26,11 +26,15 @@ import { Stack, useRouter, useSegments } from "expo-router";
 import { AuthProvider, useAuth } from "../contexts/AuthContext";
 import { useEffect } from "react";
 import { View, ActivityIndicator, StyleSheet } from "react-native";
+import { usePushNotifications } from "@/hooks/usePushNotifications";
 
 function RootLayoutNav() {
   const { userRole, isAuthenticated, isLoading } = useAuth();
   const segments = useSegments();
   const router = useRouter();
+  
+  // Инициализация push-уведомлений
+  usePushNotifications();
 
   useEffect(() => {
     // Ждём пока загрузится состояние авторизации
