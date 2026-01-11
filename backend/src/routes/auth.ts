@@ -130,5 +130,66 @@ export async function authRoutes(fastify: FastifyInstance) {
 
     return reply.send({ user });
   });
+
+  // ─────────────────────────────────────────────────────────────
+  // POST /auth/push-token — сохранение push-токена
+  // ─────────────────────────────────────────────────────────────
+  const pushTokenSchema = z.object({
+    pushToken: z.string().min(1),
+    platform: z.enum(['ios', 'android', 'web']).optional(),
+  });
+
+  fastify.post('/push-token', { preHandler: [fastify.authenticate] }, async (request, reply) => {
+    const parsed = pushTokenSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: 'Invalid push token' });
+    }
+
+    const { pushToken, platform } = parsed.data;
+    const userId = request.user.userId;
+
+    // Upsert push token
+    await prisma.pushToken.upsert({
+      where: {
+        userId_token: {
+          userId,
+          token: pushToken,
+        },
+      },
+      update: {
+        updatedAt: new Date(),
+        platform,
+      },
+      create: {
+        userId,
+        token: pushToken,
+        platform,
+      },
+    });
+
+    return reply.send({ success: true });
+  });
+
+  // ─────────────────────────────────────────────────────────────
+  // DELETE /auth/push-token — удаление push-токена (при выходе)
+  // ─────────────────────────────────────────────────────────────
+  fastify.delete('/push-token', { preHandler: [fastify.authenticate] }, async (request, reply) => {
+    const parsed = pushTokenSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: 'Invalid push token' });
+    }
+
+    const { pushToken } = parsed.data;
+    const userId = request.user.userId;
+
+    await prisma.pushToken.deleteMany({
+      where: {
+        userId,
+        token: pushToken,
+      },
+    });
+
+    return reply.send({ success: true });
+  });
 }
 

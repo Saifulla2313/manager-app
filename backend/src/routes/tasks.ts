@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
+import { notifyNewTask, notifyTaskCompleted, notifyNewComment } from '../services/push.js';
 
 const createTaskSchema = z.object({
   title: z.string().min(1),
@@ -155,6 +156,13 @@ export async function tasksRoutes(fastify: FastifyInstance) {
       },
     });
 
+    // Send push notification
+    const creator = await prisma.user.findUnique({ 
+      where: { id: creatorId }, 
+      select: { name: true } 
+    });
+    notifyNewTask(assigneeId, task.id, title, creator?.name ?? 'Менеджер');
+
     // Log activity
     await prisma.activityLog.create({
       data: {
@@ -214,6 +222,13 @@ export async function tasksRoutes(fastify: FastifyInstance) {
           taskId: task.id,
         },
       });
+
+      // Send push notification to manager
+      const employee = await prisma.user.findUnique({ 
+        where: { id: existing.assigneeId }, 
+        select: { name: true } 
+      });
+      notifyTaskCompleted(existing.creatorId, task.id, task.title, employee?.name ?? 'Сотрудник');
 
       await prisma.activityLog.create({
         data: {
@@ -284,6 +299,15 @@ export async function tasksRoutes(fastify: FastifyInstance) {
         taskId: id,
       },
     });
+
+    // Send push notification
+    notifyNewComment(
+      notifyUserId, 
+      id, 
+      task.title, 
+      comment.author.name, 
+      parsed.data.message
+    );
 
     await prisma.activityLog.create({
       data: {
