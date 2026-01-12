@@ -17,6 +17,7 @@ interface AuthContextType {
   // Auth actions
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
+  setSession: (token: string, user: User) => Promise<void>;
   
   // Selection state (для навигации)
   selectedEmployeeId: string | null;
@@ -136,6 +137,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [setToken]);
 
   // ─────────────────────────────────────────────────────────────
+  // Set Session (for registration)
+  // ─────────────────────────────────────────────────────────────
+  
+  const setSession = useCallback(async (newToken: string, newUser: User) => {
+    setToken(newToken);
+    setUser(newUser);
+  }, [setToken]);
+
+  // ─────────────────────────────────────────────────────────────
   // Render
   // ─────────────────────────────────────────────────────────────
 
@@ -148,6 +158,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isLoading,
         login,
         logout,
+        setSession,
         selectedEmployeeId,
         setSelectedEmployeeId,
         selectedTaskId,

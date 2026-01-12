@@ -13,6 +13,7 @@ export type UserRole = 'MANAGER' | 'EMPLOYEE';
 export type TaskPriority = 'LOW' | 'MEDIUM' | 'HIGH';
 export type TaskStatus = 'IN_PROGRESS' | 'DONE';
 export type NotificationType = 'NEW_TASK' | 'DEADLINE' | 'COMMENT' | 'COMPLETED' | 'OVERDUE';
+export type InviteStatus = 'PENDING' | 'ACCEPTED' | 'EXPIRED';
 
 // ─────────────────────────────────────────────────────────────
 // USER
@@ -31,6 +32,45 @@ export interface User {
 export interface AuthResponse {
   user: User;
   token: string;
+}
+
+// ─────────────────────────────────────────────────────────────
+// ORGANIZATION
+// ─────────────────────────────────────────────────────────────
+
+export interface Organization {
+  id: string;
+  name: string;
+  createdAt?: string;
+  _count?: {
+    users: number;
+    instantTasks: number;
+    routineTemplates: number;
+  };
+}
+
+// ─────────────────────────────────────────────────────────────
+// INVITE
+// ─────────────────────────────────────────────────────────────
+
+export interface Invite {
+  id: string;
+  phone: string;
+  code: string;
+  status: InviteStatus;
+  expiresAt: string;
+  usedAt: string | null;
+  createdAt: string;
+  createdBy?: {
+    id: string;
+    name: string;
+    email: string;
+  };
+  usedBy?: {
+    id: string;
+    name: string;
+    email: string;
+  } | null;
 }
 
 // ─────────────────────────────────────────────────────────────

@@ -15,6 +15,7 @@ export * from './types';
 
 // Services
 export { authService } from './services/auth';
+export { organizationsService } from './services/organizations';
 export { employeesService } from './services/employees';
 export { tasksService } from './services/tasks';
 export { routinesService } from './services/routines';

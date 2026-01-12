@@ -30,6 +30,13 @@ export const API_CONFIG = {
     REGISTER: '/auth/register',
     ME: '/auth/me',
     
+    // Organizations
+    CREATE_ORGANIZATION: '/api/organizations',
+    MY_ORGANIZATION: '/api/organizations/me',
+    INVITES: '/api/organizations/invites',
+    INVITE: (id: string) => `/api/organizations/invites/${id}`,
+    REGISTER_BY_INVITE: '/api/organizations/register-by-invite',
+    
     // Employees
     EMPLOYEES: '/employees',
     EMPLOYEE: (id: string) => `/employees/${id}`,

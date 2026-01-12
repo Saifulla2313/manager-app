@@ -188,6 +188,27 @@ export default function SettingsScreen() {
             </View>
           </View>
 
+          {/* Team Management */}
+          <View style={styles.card}>
+            <View style={styles.sectionHeader}>
+              <User size={20} color="#FF6600" />
+              <Text style={styles.sectionTitle}>Управление командой</Text>
+            </View>
+
+            <View style={styles.optionsList}>
+              <TouchableOpacity 
+                style={styles.optionItem}
+                onPress={() => router.push('/(user)/(manager)/invites')}
+              >
+                <View style={styles.optionInfo}>
+                  <Text style={styles.optionTitle}>📨 Приглашения</Text>
+                  <Text style={styles.optionDescription}>Пригласить сотрудников по WhatsApp</Text>
+                </View>
+                <ChevronRight size={20} color="#9CA3AF" />
+              </TouchableOpacity>
+            </View>
+          </View>
+
           {/* Additional Options */}
           <View style={styles.card}>
             <View style={styles.optionsList}>

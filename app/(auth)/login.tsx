@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
+import { router } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 
 export default function LoginScreen() {
@@ -107,11 +108,14 @@ export default function LoginScreen() {
             </TouchableOpacity>
           </View>
 
-          <View style={styles.registerContainer}>
+          <TouchableOpacity 
+            style={styles.registerContainer}
+            onPress={() => router.push('/(auth)/register')}
+          >
             <Text style={styles.registerText}>
               Нет аккаунта? <Text style={styles.registerLink}>Создать аккаунт</Text>
             </Text>
-          </View>
+          </TouchableOpacity>
 
           {__DEV__ && (
             <View style={styles.demoContainer}>
