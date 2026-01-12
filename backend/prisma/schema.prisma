@@ -1,0 +1,225 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  MANAGER
+  EMPLOYEE
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum TaskStatus {
+  IN_PROGRESS
+  DONE
+}
+
+enum NotificationType {
+  NEW_TASK
+  DEADLINE
+  COMMENT
+  COMPLETED
+  OVERDUE
+}
+
+// ─────────────────────────────────────────────────────────────
+// USERS
+// ─────────────────────────────────────────────────────────────
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  name      String
+  position  String?
+  avatar    String?
+  role      UserRole @default(EMPLOYEE)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Push notification tokens
+  pushTokens PushToken[]
+
+  // Relations
+  assignedTasks    InstantTask[]     @relation("AssignedTo")
+  createdTasks     InstantTask[]     @relation("CreatedBy")
+  routineTemplates RoutineTemplate[]
+  comments         Comment[]
+  notifications    Notification[]
+  activityLogs     ActivityLog[]
+
+  @@map("users")
+}
+
+// ─────────────────────────────────────────────────────────────
+// PUSH TOKENS
+// ─────────────────────────────────────────────────────────────
+model PushToken {
+  id        String   @id @default(cuid())
+  token     String
+  platform  String?  // 'ios', 'android', 'web'
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, token])
+  @@map("push_tokens")
+}
+
+// ─────────────────────────────────────────────────────────────
+// INSTANT TASKS (разовые задачи)
+// ─────────────────────────────────────────────────────────────
+model InstantTask {
+  id          String       @id @default(cuid())
+  title       String
+  description String?
+  priority    TaskPriority @default(MEDIUM)
+  status      TaskStatus   @default(IN_PROGRESS)
+  deadline    DateTime?
+
+  // Photos
+  photos           String[] // URLs to attached photos
+  completionPhotos String[] // URLs to completion proof photos
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  assigneeId String
+  assignee   User   @relation("AssignedTo", fields: [assigneeId], references: [id])
+
+  creatorId String
+  creator   User   @relation("CreatedBy", fields: [creatorId], references: [id])
+
+  comments      Comment[]
+  notifications Notification[]
+
+  @@map("instant_tasks")
+}
+
+// ─────────────────────────────────────────────────────────────
+// ROUTINE TEMPLATES (регулярные чек-листы)
+// ─────────────────────────────────────────────────────────────
+model RoutineTemplate {
+  id         String   @id @default(cuid())
+  name       String
+  repeatTime String   @default("09:00") // HH:mm format
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  // Relations
+  employeeId String
+  employee   User   @relation(fields: [employeeId], references: [id])
+
+  tasks         RoutineTask[]
+  dailyProgress DailyRoutineProgress[]
+
+  @@map("routine_templates")
+}
+
+model RoutineTask {
+  id    String @id @default(cuid())
+  title String
+  order Int    @default(0)
+
+  templateId String
+  template   RoutineTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  completions RoutineTaskCompletion[]
+
+  @@map("routine_tasks")
+}
+
+// Track daily completion of routine tasks
+model DailyRoutineProgress {
+  id   String   @id @default(cuid())
+  date DateTime @db.Date
+
+  templateId String
+  template   RoutineTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  completions RoutineTaskCompletion[]
+  comments    String?
+
+  createdAt DateTime @default(now())
+
+  @@unique([templateId, date])
+  @@map("daily_routine_progress")
+}
+
+model RoutineTaskCompletion {
+  id          String    @id @default(cuid())
+  completedAt DateTime?
+  photos      String[]
+
+  taskId String
+  task   RoutineTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  progressId String
+  progress   DailyRoutineProgress @relation(fields: [progressId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, progressId])
+  @@map("routine_task_completions")
+}
+
+// ─────────────────────────────────────────────────────────────
+// COMMENTS
+// ─────────────────────────────────────────────────────────────
+model Comment {
+  id        String   @id @default(cuid())
+  message   String
+  createdAt DateTime @default(now())
+
+  authorId String
+  author   User   @relation(fields: [authorId], references: [id])
+
+  taskId String
+  task   InstantTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@map("comments")
+}
+
+// ─────────────────────────────────────────────────────────────
+// NOTIFICATIONS
+// ─────────────────────────────────────────────────────────────
+model Notification {
+  id        String           @id @default(cuid())
+  type      NotificationType
+  title     String
+  message   String
+  read      Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  taskId String?
+  task   InstantTask? @relation(fields: [taskId], references: [id], onDelete: SetNull)
+
+  @@map("notifications")
+}
+
+// ─────────────────────────────────────────────────────────────
+// ACTIVITY LOG (журнал активности)
+// ─────────────────────────────────────────────────────────────
+model ActivityLog {
+  id        String   @id @default(cuid())
+  action    String
+  createdAt DateTime @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  @@map("activity_logs")
+}
+
