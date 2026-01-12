@@ -2,6 +2,7 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import { env } from './config/env.js';
 import jwtPlugin from './plugins/jwt.js';
+import { initializeDatabase } from './lib/db-init.js';
 import { authRoutes } from './routes/auth.js';
 import organizationRoutes from './routes/organizations.js';
 import { employeesRoutes } from './routes/employees.js';
@@ -11,6 +12,9 @@ import { notificationsRoutes } from './routes/notifications.js';
 import { statsRoutes } from './routes/stats.js';
 
 async function main() {
+  if (process.env.SKIP_DB_INIT !== "true") {
+    await initializeDatabase();
+  }
   const fastify = Fastify({
     logger: {
       level: 'info',
