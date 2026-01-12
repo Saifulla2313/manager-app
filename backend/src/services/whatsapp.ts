@@ -63,26 +63,30 @@ ${managerName} пригласил вас присоединиться к ком�
     }
 
     try {
-      const response = await fetch(`${this.baseUrl}/sync/message/send`, {
+      // Wappi.pro API: profile_id в URL, Authorization в header
+      const url = `${this.baseUrl}/sync/message/send?profile_id=${this.profileId}`;
+      
+      const response = await fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: this.apiKey,
+          'Authorization': this.apiKey,
         },
         body: JSON.stringify({
-          profile_id: this.profileId,
           recipient: this.formatPhone(phone),
           body: message,
         }),
       });
 
-      const data = (await response.json()) as { message?: string };
+      const data = (await response.json()) as { status?: string; detail?: string; message_id?: string };
 
-      if (!response.ok) {
+      console.log('📱 Wappi.pro response:', data);
+
+      if (data.status === 'error') {
         console.error('❌ Wappi.pro error:', data);
         return {
           success: false,
-          error: data.message || 'Failed to send WhatsApp message',
+          error: data.detail || 'Failed to send WhatsApp message',
         };
       }
 
@@ -99,10 +103,15 @@ ${managerName} пригласил вас присоединиться к ком�
 
   /**
    * Форматировать номер телефона для Wappi.pro
-   * Формат: 79001234567 (без +)
+   * Формат: 79001234567 (без +, с 7 в начале)
    */
   private formatPhone(phone: string): string {
-    return phone.replace(/[^\d]/g, '');
+    let digits = phone.replace(/[^\d]/g, '');
+    // Заменяем 8 на 7 в начале (российский формат)
+    if (digits.startsWith('8') && digits.length === 11) {
+      digits = '7' + digits.slice(1);
+    }
+    return digits;
   }
 }
 
