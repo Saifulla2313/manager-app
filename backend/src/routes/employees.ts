@@ -6,11 +6,12 @@ export async function employeesRoutes(fastify: FastifyInstance) {
   // GET /employees — список сотрудников (только для менеджера)
   // ─────────────────────────────────────────────────────────────
   fastify.get('/', { preHandler: [fastify.requireManager] }, async (request, reply) => {
+    const { organizationId } = request.user;
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
     const employees = await prisma.user.findMany({
-      where: { role: 'EMPLOYEE' },
+      where: { role: 'EMPLOYEE', organizationId },
       select: {
         id: true,
         name: true,
@@ -54,9 +55,10 @@ export async function employeesRoutes(fastify: FastifyInstance) {
   // ─────────────────────────────────────────────────────────────
   fastify.get<{ Params: { id: string } }>('/:id', { preHandler: [fastify.authenticate] }, async (request, reply) => {
     const { id } = request.params;
+    const { organizationId } = request.user;
 
-    const employee = await prisma.user.findUnique({
-      where: { id },
+    const employee = await prisma.user.findFirst({
+      where: { id, organizationId },
       select: {
         id: true,
         name: true,

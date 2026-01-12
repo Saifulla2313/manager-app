@@ -15,7 +15,18 @@ async function main() {
   await prisma.routineTask.deleteMany();
   await prisma.routineTemplate.deleteMany();
   await prisma.instantTask.deleteMany();
+  await prisma.invite.deleteMany();
+  await prisma.pushToken.deleteMany();
   await prisma.user.deleteMany();
+  await prisma.organization.deleteMany();
+
+  // Create organization
+  const organization = await prisma.organization.create({
+    data: {
+      name: 'Demo Restaurant',
+    },
+  });
+  console.log('✅ Created organization:', organization.name);
 
   // Create manager
   const managerPassword = await bcrypt.hash('manager123', 12);
@@ -24,8 +35,10 @@ async function main() {
       email: 'manager@example.com',
       password: managerPassword,
       name: 'Sarah Johnson',
+      phone: '+79001234567',
       position: 'Менеджер',
       role: 'MANAGER',
+      organizationId: organization.id,
     },
   });
   console.log('✅ Created manager:', manager.email);
@@ -38,8 +51,10 @@ async function main() {
         email: 'mike@example.com',
         password: employeePassword,
         name: 'Mike Chen',
+        phone: '+79001234568',
         position: 'Повар',
         role: 'EMPLOYEE',
+        organizationId: organization.id,
       },
     }),
     prisma.user.create({
@@ -47,8 +62,10 @@ async function main() {
         email: 'emma@example.com',
         password: employeePassword,
         name: 'Emma Davis',
+        phone: '+79001234569',
         position: 'Бармен',
         role: 'EMPLOYEE',
+        organizationId: organization.id,
       },
     }),
     prisma.user.create({
@@ -56,8 +73,10 @@ async function main() {
         email: 'james@example.com',
         password: employeePassword,
         name: 'James Wilson',
+        phone: '+79001234570',
         position: 'Официант',
         role: 'EMPLOYEE',
+        organizationId: organization.id,
       },
     }),
     prisma.user.create({
@@ -65,8 +84,10 @@ async function main() {
         email: 'lisa@example.com',
         password: employeePassword,
         name: 'Lisa Anderson',
+        phone: '+79001234571',
         position: 'Хостес',
         role: 'EMPLOYEE',
+        organizationId: organization.id,
       },
     }),
   ]);
@@ -81,6 +102,7 @@ async function main() {
         priority: 'HIGH',
         status: 'IN_PROGRESS',
         deadline: new Date(Date.now() + 2 * 60 * 60 * 1000), // 2 hours
+        organizationId: organization.id,
         assigneeId: employees[0].id,
         creatorId: manager.id,
       },
@@ -92,6 +114,7 @@ async function main() {
         priority: 'MEDIUM',
         status: 'IN_PROGRESS',
         deadline: new Date(Date.now() + 24 * 60 * 60 * 1000), // 1 day
+        organizationId: organization.id,
         assigneeId: employees[1].id,
         creatorId: manager.id,
       },
@@ -103,6 +126,7 @@ async function main() {
         priority: 'LOW',
         status: 'DONE',
         deadline: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
+        organizationId: organization.id,
         assigneeId: employees[1].id,
         creatorId: manager.id,
       },
@@ -114,6 +138,7 @@ async function main() {
         priority: 'MEDIUM',
         status: 'IN_PROGRESS',
         deadline: new Date(Date.now() + 48 * 60 * 60 * 1000),
+        organizationId: organization.id,
         assigneeId: employees[1].id,
         creatorId: manager.id,
       },
@@ -126,6 +151,7 @@ async function main() {
     data: {
       name: 'Утренний чек-лист бармена',
       repeatTime: '09:00',
+      organizationId: organization.id,
       employeeId: employees[1].id,
       tasks: {
         create: [
@@ -140,6 +166,19 @@ async function main() {
     },
   });
   console.log('✅ Created routine template:', routineTemplate.name);
+
+  // Create demo invite
+  const demoInvite = await prisma.invite.create({
+    data: {
+      phone: '+79999999999',
+      code: 'DEMO123',
+      status: 'PENDING',
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
+      organizationId: organization.id,
+      createdById: manager.id,
+    },
+  });
+  console.log('✅ Created demo invite:', demoInvite.code);
 
   // Create some notifications
   await prisma.notification.createMany({

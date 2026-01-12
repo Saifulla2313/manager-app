@@ -34,10 +34,13 @@ export async function authRoutes(fastify: FastifyInstance) {
       return reply.status(409).send({ error: 'User with this email already exists' });
     }
 
-    // Hash password
-    const hashedPassword = await bcrypt.hash(password, 12);
+    // This route is deprecated - registration should go through invite system
+    return reply.status(400).send({ 
+      error: 'Direct registration is not allowed. Use invite-based registration instead.' 
+    });
 
-    // Create user
+    /* Old code - kept for reference
+    const hashedPassword = await bcrypt.hash(password, 12);
     const user = await prisma.user.create({
       data: {
         email,
@@ -45,6 +48,7 @@ export async function authRoutes(fastify: FastifyInstance) {
         name,
         position,
         role,
+        organizationId: 'required',
       },
       select: {
         id: true,
@@ -54,15 +58,7 @@ export async function authRoutes(fastify: FastifyInstance) {
         role: true,
         createdAt: true,
       },
-    });
-
-    // Generate token
-    const token = fastify.jwt.sign({
-      userId: user.id,
-      role: user.role,
-    });
-
-    return reply.status(201).send({ user, token });
+    }); */
   });
 
   // ─────────────────────────────────────────────────────────────
@@ -88,10 +84,11 @@ export async function authRoutes(fastify: FastifyInstance) {
       return reply.status(401).send({ error: 'Invalid credentials' });
     }
 
-    // Generate token
+    // Generate token with organizationId
     const token = fastify.jwt.sign({
       userId: user.id,
       role: user.role,
+      organizationId: user.organizationId,
     });
 
     return reply.send({

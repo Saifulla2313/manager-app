@@ -3,6 +3,7 @@ import cors from '@fastify/cors';
 import { env } from './config/env.js';
 import jwtPlugin from './plugins/jwt.js';
 import { authRoutes } from './routes/auth.js';
+import organizationRoutes from './routes/organizations.js';
 import { employeesRoutes } from './routes/employees.js';
 import { tasksRoutes } from './routes/tasks.js';
 import { routinesRoutes } from './routes/routines.js';
@@ -32,6 +33,7 @@ async function main() {
 
   // Routes
   await fastify.register(authRoutes, { prefix: '/auth' });
+  await fastify.register(organizationRoutes, { prefix: '/api' });
   await fastify.register(employeesRoutes, { prefix: '/employees' });
   await fastify.register(tasksRoutes, { prefix: '/tasks' });
   await fastify.register(routinesRoutes, { prefix: '/routines' });

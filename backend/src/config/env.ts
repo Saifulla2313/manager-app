@@ -6,6 +6,8 @@ const envSchema = z.object({
   JWT_SECRET: z.string().min(16),
   PORT: z.coerce.number().default(3000),
   HOST: z.string().default('0.0.0.0'),
+  WAPPI_API_KEY: z.string().optional(),
+  WAPPI_PROFILE_ID: z.string().optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);

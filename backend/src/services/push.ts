@@ -110,13 +110,13 @@ async function sendPushNotifications(messages: PushMessage[]): Promise<ExpoPushT
         body: JSON.stringify(chunk),
       });
 
-      const result = await response.json();
+      const result = (await response.json()) as { data?: ExpoPushTicket[] };
       
       if (result.data) {
         tickets.push(...result.data);
         
         // Логируем ошибки
-        result.data.forEach((ticket: ExpoPushTicket, index: number) => {
+        result.data.forEach((ticket, index: number) => {
           if (ticket.status === 'error') {
             console.error(`Push notification error for ${chunk[index].to}:`, ticket.message);
             

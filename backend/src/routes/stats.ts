@@ -6,10 +6,12 @@ export async function statsRoutes(fastify: FastifyInstance) {
   // GET /stats/dashboard — статистика для дашборда менеджера
   // ─────────────────────────────────────────────────────────────
   fastify.get('/dashboard', { preHandler: [fastify.requireManager] }, async (request, reply) => {
+    const { organizationId } = request.user;
     const now = new Date();
 
-    // Get all tasks
+    // Get all tasks for this organization
     const tasks = await prisma.instantTask.findMany({
+      where: { organizationId },
       select: {
         id: true,
         status: true,
@@ -34,8 +36,11 @@ export async function statsRoutes(fastify: FastifyInstance) {
 
     const pending = tasks.filter((t) => t.status === 'IN_PROGRESS').length;
 
-    // Recent activity
+    // Recent activity for this organization
     const recentActivity = await prisma.activityLog.findMany({
+      where: {
+        user: { organizationId },
+      },
       orderBy: { createdAt: 'desc' },
       take: 10,
       include: {
@@ -45,11 +50,15 @@ export async function statsRoutes(fastify: FastifyInstance) {
       },
     });
 
-    // Employee count
-    const employeeCount = await prisma.user.count({ where: { role: 'EMPLOYEE' } });
+    // Employee count for this organization
+    const employeeCount = await prisma.user.count({ 
+      where: { role: 'EMPLOYEE', organizationId } 
+    });
 
-    // Active routine templates
-    const routineTemplateCount = await prisma.routineTemplate.count();
+    // Active routine templates for this organization
+    const routineTemplateCount = await prisma.routineTemplate.count({ 
+      where: { organizationId } 
+    });
 
     return reply.send({
       stats: {
@@ -72,11 +81,11 @@ export async function statsRoutes(fastify: FastifyInstance) {
   // GET /stats/employee — статистика для сотрудника
   // ─────────────────────────────────────────────────────────────
   fastify.get('/employee', { preHandler: [fastify.authenticate] }, async (request, reply) => {
-    const { userId } = request.user;
+    const { userId, organizationId } = request.user;
     const now = new Date();
 
     const tasks = await prisma.instantTask.findMany({
-      where: { assigneeId: userId },
+      where: { assigneeId: userId, organizationId },
       select: {
         id: true,
         status: true,

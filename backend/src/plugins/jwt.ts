@@ -8,10 +8,12 @@ declare module '@fastify/jwt' {
     payload: {
       userId: string;
       role: 'MANAGER' | 'EMPLOYEE';
+      organizationId: string;
     };
     user: {
       userId: string;
       role: 'MANAGER' | 'EMPLOYEE';
+      organizationId: string;
     };
   }
 }

@@ -20,9 +20,11 @@ export async function routinesRoutes(fastify: FastifyInstance) {
   // GET /routines — список шаблонов
   // ─────────────────────────────────────────────────────────────
   fastify.get('/', { preHandler: [fastify.authenticate] }, async (request, reply) => {
-    const { userId, role } = request.user;
+    const { userId, role, organizationId } = request.user;
 
-    const where = role === 'MANAGER' ? {} : { employeeId: userId };
+    const where = role === 'MANAGER' 
+      ? { organizationId } 
+      : { employeeId: userId, organizationId };
 
     const templates = await prisma.routineTemplate.findMany({
       where,
@@ -46,9 +48,10 @@ export async function routinesRoutes(fastify: FastifyInstance) {
   // ─────────────────────────────────────────────────────────────
   fastify.get<{ Params: { id: string } }>('/:id', { preHandler: [fastify.authenticate] }, async (request, reply) => {
     const { id } = request.params;
+    const { organizationId } = request.user;
 
-    const template = await prisma.routineTemplate.findUnique({
-      where: { id },
+    const template = await prisma.routineTemplate.findFirst({
+      where: { id, organizationId },
       include: {
         employee: {
           select: { id: true, name: true, position: true },
@@ -77,16 +80,20 @@ export async function routinesRoutes(fastify: FastifyInstance) {
     }
 
     const { name, employeeId, repeatTime, tasks } = parsed.data;
+    const { organizationId } = request.user;
 
-    // Verify employee exists
-    const employee = await prisma.user.findUnique({ where: { id: employeeId } });
+    // Verify employee exists and is in same organization
+    const employee = await prisma.user.findFirst({ 
+      where: { id: employeeId, organizationId } 
+    });
     if (!employee) {
-      return reply.status(404).send({ error: 'Employee not found' });
+      return reply.status(404).send({ error: 'Employee not found in your organization' });
     }
 
     const template = await prisma.routineTemplate.create({
       data: {
         name,
+        organizationId,
         employeeId,
         repeatTime,
         tasks: {

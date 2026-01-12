@@ -26,9 +26,11 @@ export async function tasksRoutes(fastify: FastifyInstance) {
   // GET /tasks — список задач
   // ─────────────────────────────────────────────────────────────
   fastify.get('/', { preHandler: [fastify.authenticate] }, async (request, reply) => {
-    const { userId, role } = request.user;
+    const { userId, role, organizationId } = request.user;
 
-    const where = role === 'MANAGER' ? {} : { assigneeId: userId };
+    const where = role === 'MANAGER' 
+      ? { organizationId } 
+      : { assigneeId: userId, organizationId };
 
     const tasks = await prisma.instantTask.findMany({
       where,
@@ -70,9 +72,10 @@ export async function tasksRoutes(fastify: FastifyInstance) {
   // ─────────────────────────────────────────────────────────────
   fastify.get<{ Params: { id: string } }>('/:id', { preHandler: [fastify.authenticate] }, async (request, reply) => {
     const { id } = request.params;
+    const { organizationId } = request.user;
 
-    const task = await prisma.instantTask.findUnique({
-      where: { id },
+    const task = await prisma.instantTask.findFirst({
+      where: { id, organizationId },
       include: {
         assignee: {
           select: {
@@ -121,11 +124,14 @@ export async function tasksRoutes(fastify: FastifyInstance) {
 
     const { title, description, priority, deadline, assigneeId, photos } = parsed.data;
     const creatorId = request.user.userId;
+    const { organizationId } = request.user;
 
-    // Verify assignee exists and is employee
-    const assignee = await prisma.user.findUnique({ where: { id: assigneeId } });
+    // Verify assignee exists and is in same organization
+    const assignee = await prisma.user.findFirst({ 
+      where: { id: assigneeId, organizationId } 
+    });
     if (!assignee) {
-      return reply.status(404).send({ error: 'Assignee not found' });
+      return reply.status(404).send({ error: 'Assignee not found in your organization' });
     }
 
     const task = await prisma.instantTask.create({
@@ -135,6 +141,7 @@ export async function tasksRoutes(fastify: FastifyInstance) {
         priority,
         deadline: deadline ? new Date(deadline) : null,
         photos: photos ?? [],
+        organizationId,
         assigneeId,
         creatorId,
       },

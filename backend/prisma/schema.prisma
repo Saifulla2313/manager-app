@@ -31,6 +31,58 @@ enum NotificationType {
   OVERDUE
 }
 
+enum InviteStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
+}
+
+// ─────────────────────────────────────────────────────────────
+// ORGANIZATIONS (Компании)
+// ─────────────────────────────────────────────────────────────
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  users            User[]
+  invites          Invite[]
+  instantTasks     InstantTask[]
+  routineTemplates RoutineTemplate[]
+
+  @@map("organizations")
+}
+
+// ─────────────────────────────────────────────────────────────
+// INVITES (Приглашения сотрудников)
+// ─────────────────────────────────────────────────────────────
+model Invite {
+  id        String       @id @default(cuid())
+  phone     String       // Номер телефона приглашаемого
+  code      String       @unique // Инвайт-код (например, 6-значный)
+  status    InviteStatus @default(PENDING)
+  expiresAt DateTime     // Срок действия инвайта
+  usedAt    DateTime?    // Когда был использован
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  // Организация
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  // Кто создал инвайт (менеджер)
+  createdById String
+  createdBy   User   @relation("InvitesCreated", fields: [createdById], references: [id])
+
+  // Кто использовал (сотрудник)
+  usedById String?
+  usedBy   User?   @relation("InvitesUsed", fields: [usedById], references: [id])
+
+  @@map("invites")
+}
+
 // ─────────────────────────────────────────────────────────────
 // USERS
 // ─────────────────────────────────────────────────────────────
@@ -39,11 +91,16 @@ model User {
   email     String   @unique
   password  String
   name      String
+  phone     String?  // Добавили телефон
   position  String?
   avatar    String?
   role      UserRole @default(EMPLOYEE)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  // Организация
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   // Push notification tokens
   pushTokens PushToken[]
@@ -55,6 +112,10 @@ model User {
   comments         Comment[]
   notifications    Notification[]
   activityLogs     ActivityLog[]
+
+  // Инвайты
+  createdInvites Invite[] @relation("InvitesCreated")
+  usedInvite     Invite[] @relation("InvitesUsed")
 
   @@map("users")
 }
@@ -94,6 +155,10 @@ model InstantTask {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // Организация
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
   // Relations
   assigneeId String
   assignee   User   @relation("AssignedTo", fields: [assigneeId], references: [id])
@@ -116,6 +181,10 @@ model RoutineTemplate {
   repeatTime String   @default("09:00") // HH:mm format
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+
+  // Организация
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   // Relations
   employeeId String
