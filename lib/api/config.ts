@@ -2,14 +2,22 @@
  * API Configuration
  * 
  * Централизованная конфигурация для работы с бэкендом.
- * В продакшене BASE_URL должен браться из переменных окружения.
+ * Использует переменные окружения из .env файла.
  */
 
 import { Platform } from 'react-native';
 
+// Expo автоматически подхватывает переменные из .env с префиксом EXPO_PUBLIC_
+const ENV_API_URL = process.env.EXPO_PUBLIC_API_URL;
+
 // На Android эмуляторе localhost недоступен, используем 10.0.2.2
 // На iOS симуляторе и реальных устройствах — localhost или IP машины
 const getBaseUrl = () => {
+  // Если есть переменная окружения — используем её
+  if (ENV_API_URL) {
+    return ENV_API_URL;
+  }
+  
   if (__DEV__) {
     // В разработке
     if (Platform.OS === 'android') {
